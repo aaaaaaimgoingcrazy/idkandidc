@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: osu-stats-card
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: OSU_CLIENT_ID
+        sync: false
+      - key: OSU_CLIENT_SECRET
+        sync: false
