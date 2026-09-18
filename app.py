@@ -211,12 +211,6 @@ def rank_change_segments(delta, text_gray, green, red):
     return [("\u2013 unchanged", text_gray)]
 
 
-def make_gradient_background(width, height):
-    """Solid black background with 30% transparency."""
-    bg = Image.new("RGBA", (width, height), (0, 0, 0, 77))  # 0.3 * 255 ≈ 77
-    return bg
-
-
 def render_card_frames(data, mode, user):
     """Builds both animation frames (summary + detail views of the Daily
     Challenge box) as PIL RGBA images of identical size."""
@@ -245,31 +239,32 @@ def render_card_frames(data, mode, user):
     flag_img = fetch_flag_image(country_code)
 
     # ---- palette ----
-    glass_fill = (0, 0, 0, 100)  # Black with ~40% transparency for frames
+    # 0.3 opacity translation (0.3 * 255 = ~77)
+    glass_fill = (0, 0, 0, 77)
     border_color = (255, 255, 255)
     text_white = (240, 240, 245)
     text_gray = (185, 190, 205)
     green = (110, 235, 150)
     red = (255, 110, 110)
 
-    # ---- layout (reduced sizes) ----
-    width = 750  # Reduced from 900
-    padding = 10  # Reduced from 16
-    gap = 8  # Reduced from 12
+    # ---- compact layout parameters ----
+    width = 900
+    padding = 12
+    gap = 10
     cols = 3
     content_w = width - 2 * padding
     col_w = content_w / cols
     card_w = col_w - gap
-    row_h_short = 52  # Reduced from 62
-    row_h_tall = 72  # Reduced from 84
+    row_h_short = 52
+    row_h_tall = 74
 
-    left_w = 180  # Reduced from 230
-    hero_gap = 8  # Reduced from 12
+    left_w = 210
+    hero_gap = 10
     hero_x0 = padding + left_w + hero_gap
     hero_area_w = content_w - left_w - hero_gap
     hero_w = (hero_area_w - 2 * hero_gap) / 3
-    hero_h = 100  # Reduced from 122
-    header_h = 12 + hero_h + 12  # Reduced padding
+    hero_h = 92
+    header_h = 12 + hero_h + 12
 
     def row_heights_for(items):
         heights = []
@@ -280,29 +275,29 @@ def render_card_frames(data, mode, user):
         return heights
 
     main_heights = row_heights_for(main_items)
-    total_height = header_h + sum(main_heights) + 28 + padding  # Reduced from 34
+    total_height = header_h + sum(main_heights) + 24 + padding
 
-    # Reduced font sizes
-    font_username = load_font(18, "serif", "italic")  # Reduced from 22
-    font_country = load_font(11, "sans", "regular")  # Reduced from 13
-    font_hero_title = load_font(13, "serif", "italic")  # Reduced from 15
-    font_hero_value = load_font(22, "sans", "bold")  # Reduced from 26
-    font_hero_summary = load_font(12, "sans", "bold")  # Reduced from 19
-    font_hero_sub = load_font(10, "sans", "regular")  # Reduced from 13
-    font_daily_row_label = load_font(10, "sans", "regular")  # Reduced from 13
-    font_daily_row_value = load_font(12, "sans", "bold")  # Reduced from 14
-    font_label = load_font(11, "sans", "regular")  # Reduced from 13
-    font_value = load_font(17, "sans", "bold")  # Reduced from 20
-    font_sub = load_font(10, "sans", "regular")  # Reduced from 12
+    font_username = load_font(22, "serif", "italic")
+    font_country = load_font(13, "sans", "regular")
+    font_hero_title = load_font(15, "serif", "italic")
+    font_hero_value = load_font(26, "sans", "bold")
+    font_hero_sub = load_font(13, "sans", "regular")
+    font_daily_row_label = load_font(12, "sans", "regular")
+    font_daily_row_value = load_font(13, "sans", "bold")
+    font_label = load_font(13, "sans", "regular")
+    font_value = load_font(20, "sans", "bold")
+    font_sub = load_font(12, "sans", "regular")
 
     def compose(phase):
-        img = make_gradient_background(width, total_height)
+        # Master Background: Black with 0.3 opacity
+        img = Image.new("RGBA", (width, total_height), glass_fill)
         draw = ImageDraw.Draw(img)
 
         # ---- header: avatar with white ring, username, flag + country ----
-        avatar_size = 50  # Reduced from 60
+        avatar_size = 64
         text_x = padding
         avatar_cy = 12 + hero_h // 2
+        
         if avatar_img:
             fitted = ImageOps.fit(avatar_img, (avatar_size, avatar_size))
             mask = Image.new("L", (avatar_size, avatar_size), 0)
@@ -310,48 +305,49 @@ def render_card_frames(data, mode, user):
             ax, ay = padding, avatar_cy - avatar_size // 2
             img.paste(fitted, (ax, ay), mask)
             draw.ellipse([ax - 2, ay - 2, ax + avatar_size + 2, ay + avatar_size + 2],
-                         outline=border_color, width=2)  # Reduced from 3
-            text_x = padding + avatar_size + 12  # Reduced from 16
+                         outline=border_color, width=3)
+            text_x = padding + avatar_size + 16
         else:
             ax, ay = padding, avatar_cy - avatar_size // 2
             draw.ellipse([ax, ay, ax + avatar_size, ay + avatar_size], fill=(0, 0, 0, 200))
             draw.ellipse([ax - 2, ay - 2, ax + avatar_size + 2, ay + avatar_size + 2],
-                         outline=border_color, width=2)
-            text_x = padding + avatar_size + 12
+                         outline=border_color, width=3)
+            text_x = padding + avatar_size + 16
 
-        name_y = avatar_cy - 18  # Adjusted
-        max_name_w = hero_x0 - text_x - 8
+        name_y = avatar_cy - 22
+        max_name_w = hero_x0 - text_x - 12
         display_name = username
         if draw.textlength(display_name, font=font_username) > max_name_w:
             while display_name and draw.textlength(display_name + "\u2026", font=font_username) > max_name_w:
                 display_name = display_name[:-1]
             display_name += "\u2026"
         draw.text((text_x, name_y), display_name, font=font_username, fill=text_white)
-        flag_y = name_y + 24  # Reduced from 30
+        
+        flag_y = name_y + 30
         flag_x = text_x
         if flag_img:
             img.paste(flag_img, (flag_x, flag_y), flag_img)
-            flag_x += flag_img.width + 4  # Reduced from 6
+            flag_x += flag_img.width + 6
         draw.text((flag_x, flag_y - 2), country_name or country_code, font=font_country, fill=text_gray)
 
         # ---- 3 header hero boxes ----
         def hero_box(index, title):
             x = hero_x0 + index * (hero_w + hero_gap)
-            y = 12  # Reduced from 16
-            draw.rounded_rectangle([x, y, x + hero_w, y + hero_h], radius=6,  # Reduced from 8
-                                    fill=glass_fill, outline=border_color, width=1)  # Reduced from 2
-            draw.text((x + 10, y + 8), title, font=font_hero_title, fill=text_white)  # Adjusted padding
-            return x + 10, y  # Adjusted
+            y = 12
+            draw.rounded_rectangle([x, y, x + hero_w, y + hero_h], radius=8,
+                                    fill=glass_fill, outline=border_color, width=2)
+            draw.text((x + 14, y + 8), title, font=font_hero_title, fill=text_white)
+            return x + 14, y
 
         x0, y0 = hero_box(0, "Global Ranking")
-        draw.text((x0, y0 + 32), f"#{fmt_int(global_rank)}" if global_rank else "Unranked",  # Adjusted from 38
+        draw.text((x0, y0 + 32), f"#{fmt_int(global_rank)}" if global_rank else "Unranked",
                    font=font_hero_value, fill=text_white)
-        draw_segments(draw, (x0, y0 + 62), rank_change_segments(global_delta, text_gray, green, red), font_hero_sub)  # Adjusted from 76
+        draw_segments(draw, (x0, y0 + 64), rank_change_segments(global_delta, text_gray, green, red), font_hero_sub)
 
         x0, y0 = hero_box(1, "Country Ranking")
         draw.text((x0, y0 + 32), f"#{fmt_int(country_rank)}" if country_rank else "Unranked",
                    font=font_hero_value, fill=text_white)
-        draw_segments(draw, (x0, y0 + 62), rank_change_segments(country_delta, text_gray, green, red), font_hero_sub)
+        draw_segments(draw, (x0, y0 + 64), rank_change_segments(country_delta, text_gray, green, red), font_hero_sub)
 
         x0, y0 = hero_box(2, "Daily Challenge")
         if not daily:
@@ -361,25 +357,17 @@ def render_card_frames(data, mode, user):
             daily_cur = daily.get("daily_streak_current", 0)
             weekly_cur = daily.get("weekly_streak_current", 0)
             
-            # Vertical layout with labels
-            label_y = y0 + 32
-            value_y = label_y + 14
-            label_x = x0
-            
-            # Total Participation
-            draw.text((label_x, label_y), "Total Participation", font=font_daily_row_label, fill=text_gray)
-            draw.text((label_x, value_y), f"{fmt_int(participation)}d", 
-                     font=font_hero_summary, fill=tier_color(participation, 0))
-            
-            # Current Daily Streak
-            draw.text((label_x + hero_w/3, label_y), "Current Daily Streak", font=font_daily_row_label, fill=text_gray)
-            draw.text((label_x + hero_w/3, value_y), f"{fmt_int(daily_cur)}d", 
-                     font=font_hero_summary, fill=tier_color(daily_cur, 1))
-            
-            # Current Weekly Streak
-            draw.text((label_x + 2*hero_w/3, label_y), "Current Weekly Streak", font=font_daily_row_label, fill=text_gray)
-            draw.text((label_x + 2*hero_w/3, value_y), f"{fmt_int(weekly_cur)}w", 
-                     font=font_hero_summary, fill=tier_color(weekly_cur, 2))
+            rows = [
+                ("Total Participation", f"{fmt_int(participation)}d"),
+                ("Current Daily Streak", f"{fmt_int(daily_cur)}d"),
+                ("Current Weekly Streak", f"{fmt_int(weekly_cur)}w"),
+            ]
+            ry = y0 + 26
+            for label, value in rows:
+                draw.text((x0, ry), label, font=font_daily_row_label, fill=text_white)
+                value_w = draw.textlength(value, font=font_daily_row_value)
+                draw.text((x0 + hero_w - 16 - value_w, ry - 1), value, font=font_daily_row_value, fill=text_white)
+                ry += 18
         else:
             rows = [
                 ("Best Daily Streak", f"{fmt_int(daily.get('daily_streak_best', 0))}d",
@@ -389,12 +377,12 @@ def render_card_frames(data, mode, user):
                 ("Top 10% Placements", fmt_int(daily.get("top_10p_placements", 0)), text_white),
                 ("Top 50% Placements", fmt_int(daily.get("top_50p_placements", 0)), text_white),
             ]
-            ry = y0 + 32  # Adjusted from 38
+            ry = y0 + 24
             for label, value, color in rows:
                 draw.text((x0, ry), label, font=font_daily_row_label, fill=text_gray)
                 value_w = draw.textlength(value, font=font_daily_row_value)
-                draw.text((x0 + hero_w - 22 - value_w, ry - 1), value, font=font_daily_row_value, fill=color)  # Adjusted from 28
-                ry += 16  # Reduced from 18
+                draw.text((x0 + hero_w - 16 - value_w, ry - 1), value, font=font_daily_row_value, fill=color)
+                ry += 16
 
         # ---- main stats grid ----
         y_cursor = header_h
@@ -404,15 +392,15 @@ def render_card_frames(data, mode, user):
             for col, (label, value) in enumerate(row_items):
                 x = padding + col * col_w
                 y = y_cursor
-                draw.rounded_rectangle([x, y, x + card_w, y + this_card_h], radius=6,  # Reduced from 8
-                                        fill=glass_fill, outline=border_color, width=1)  # Reduced from 2
-                inner_x = x + 10  # Reduced from 14
-                draw.text((inner_x, y + 7), label, font=font_label, fill=text_gray)  # Adjusted from 10
-                draw.text((inner_x, y + 23), value, font=font_value, fill=text_white)  # Adjusted from 30
+                draw.rounded_rectangle([x, y, x + card_w, y + this_card_h], radius=8,
+                                        fill=glass_fill, outline=border_color, width=2)
+                inner_x = x + 14
+                draw.text((inner_x, y + 8), label, font=font_label, fill=text_gray)
+                draw.text((inner_x, y + 26), value, font=font_value, fill=text_white)
             y_cursor += this_row_h
 
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        draw.text((padding, y_cursor + 4), f"Last updated {timestamp} \u00b7 refreshes hourly",  # Adjusted from 6
+        draw.text((padding, y_cursor + 4), f"Last updated {timestamp} \u00b7 refreshes hourly",
                    font=font_sub, fill=text_gray)
 
         return img
@@ -420,14 +408,15 @@ def render_card_frames(data, mode, user):
     return compose("summary"), compose("detail")
 
 
-def render_card_gif(data, mode, user):
+def render_card_apng(data, mode, user):
+    """Outputs as an Animated PNG (APNG). Standard GIFs do not support partial 
+    (0.3) transparency, so they would either become fully opaque or invisible."""
     frame1, frame2 = render_card_frames(data, mode, user)
-    p1 = frame1.convert("RGB").convert("P", palette=Image.ADAPTIVE, colors=256)
-    p2 = frame2.convert("RGB").convert("P", palette=Image.ADAPTIVE, colors=256)
     buf = io.BytesIO()
-    p1.save(
-        buf, format="GIF", save_all=True, append_images=[p2],
-        duration=[5000, 5000], loop=0, disposal=2,
+    
+    frame1.save(
+        buf, format="PNG", save_all=True, append_images=[frame2],
+        duration=5000, loop=0, disposal=2
     )
     return buf.getvalue()
 
@@ -454,12 +443,12 @@ def render_profile_basics():
         image_bytes = cached[1]
     else:
         data = get_user_stats(user, mode)
-        image_bytes = render_card_gif(data, mode, user)
+        image_bytes = render_card_apng(data, mode, user)
         _image_cache[cache_key] = (now + CACHE_TTL_SECONDS, image_bytes)
 
     return Response(
         image_bytes,
-        mimetype="image/gif",
+        mimetype="image/png",  # Modified from image/gif as we now output APNG
         headers={"Cache-Control": "public, max-age=3600"},
     )
 
@@ -467,8 +456,6 @@ def render_profile_basics():
 @app.route("/")
 @app.route("/ping")
 def ping():
-    # Used both as a health check and as the target for an external
-    # "keep-alive" pinger (see DEPLOY.md) so the free host doesn't sleep.
     return "ok", 200
 
 
