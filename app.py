@@ -158,19 +158,73 @@ def build_stats_list(data):
 
     global_rank = stats.get("global_rank")
     country_rank = stats.get("country_rank")
-    country_code = (data.get("country") or {}).get("code", "")
 
     return [
-        ("Global Rank", f"#{fmt_int(global_rank)}" if global_rank else "Unranked", ""),
-        ("Country Rank", f"#{fmt_int(country_rank)}" if country_rank else "Unranked", country_code),
-        ("Performance", f"{stats.get('pp', 0):,.0f}pp", ""),
-        ("Accuracy", f"{stats.get('hit_accuracy', 0):.2f}%", ""),
-        ("Play Count", fmt_int(stats.get("play_count", 0)), "plays"),
-        ("Ranked Score", fmt_int(stats.get("ranked_score", 0)), ""),
-        ("SS Count", fmt_int(grades.get("ssh", 0) + grades.get("ss", 0)), "incl. silver"),
-        ("S Count", fmt_int(grades.get("sh", 0) + grades.get("s", 0)), "incl. silver"),
-        ("A Count", fmt_int(grades.get("a", 0)), ""),
+        ("Global Rank", f"#{fmt_int(global_rank)}" if global_rank else "Unranked"),
+        ("Country Rank", f"#{fmt_int(country_rank)}" if country_rank else "Unranked"),
+        ("Performance", f"{stats.get('pp', 0):,.0f}pp"),
+        ("Accuracy", f"{stats.get('hit_accuracy', 0):.2f}%"),
+        ("Play Count", fmt_int(stats.get("play_count", 0))),
+        ("Ranked Score", fmt_int(stats.get("ranked_score", 0))),
+        ("SS", fmt_int(grades.get("ss", 0))),
+        ("SSH", fmt_int(grades.get("ssh", 0))),
+        ("S", fmt_int(grades.get("s", 0))),
+        ("SH", fmt_int(grades.get("sh", 0))),
+        ("A", fmt_int(grades.get("a", 0))),
     ]
+
+
+# Daily Challenge tiers: name, participation-days, daily-streak-days,
+# weekly-streak-weeks, and the color osu! uses for that tier's badge.
+# Source: the in-game Daily Challenge tier table.
+DAILY_CHALLENGE_TIERS = [
+    ("Lustrous", 1080, 360, 53, (242, 152, 198)),
+    ("Radiant", 720, 240, 36, (197, 173, 255)),
+    ("Rhodium", 360, 120, 19, (188, 227, 179)),
+    ("Platinum", 180, 60, 10, (118, 231, 230)),
+    ("Gold", 90, 30, 6, (255, 229, 102)),
+    ("Silver", 30, 10, 3, (188, 188, 211)),
+    ("Bronze", 15, 5, 2, (154, 113, 92)),
+    ("Iron", 0, 0, 0, (186, 179, 171)),
+]
+
+
+def tier_color(value, column):
+    """column: 0 = total participation (days), 1 = daily streak (days),
+    2 = weekly streak (weeks)."""
+    for _name, p, d, w, color in DAILY_CHALLENGE_TIERS:
+        threshold = (p, d, w)[column]
+        if value >= threshold:
+            return color
+    return DAILY_CHALLENGE_TIERS[-1][4]
+
+
+def build_daily_challenge_list(daily):
+    participation = daily.get("playcount", 0)
+    daily_cur = daily.get("daily_streak_current", 0)
+    weekly_cur = daily.get("weekly_streak_current", 0)
+    daily_best = daily.get("daily_streak_best", 0)
+    weekly_best = daily.get("weekly_streak_best", 0)
+
+    return [
+        ("Total Participation", f"{fmt_int(participation)}d", tier_color(participation, 0)),
+        ("Current Daily Streak", f"{fmt_int(daily_cur)}d", tier_color(daily_cur, 1)),
+        ("Current Weekly Streak", f"{fmt_int(weekly_cur)}w", tier_color(weekly_cur, 2)),
+        ("Best Daily Streak", f"{fmt_int(daily_best)}d", tier_color(daily_best, 1)),
+        ("Best Weekly Streak", f"{fmt_int(weekly_best)}w", tier_color(weekly_best, 2)),
+        ("Top 10% Placements", fmt_int(daily.get("top_10p_placements", 0)), None),
+        ("Top 50% Placements", fmt_int(daily.get("top_50p_placements", 0)), None),
+    ]
+
+
+def rank_change_segments(delta, text_gray, green, red):
+    if delta is None:
+        return [("no change yet today", text_gray)]
+    if delta > 0:
+        return [(f"\u25bc {delta}", green), (" today", text_gray)]
+    if delta < 0:
+        return [(f"\u25b2 {abs(delta)}", red), (" today", text_gray)]
+    return [("\u2013 unchanged today", text_gray)]
 
 
 def render_card(data, mode, user):
@@ -182,48 +236,70 @@ def render_card(data, mode, user):
     stats = data.get("statistics", {}) or {}
     daily = data.get("daily_challenge_user_stats", {}) or {}
 
-    rows = build_stats_list(data)
+    main_items = build_stats_list(data)
+    daily_items = build_daily_challenge_list(daily) if daily else []
 
     global_rank = stats.get("global_rank")
     country_rank = stats.get("country_rank")
     global_delta, country_delta = get_daily_rank_change(user, mode, global_rank, country_rank)
 
-    width = 900
-    cols = 3
-    padding = 20
-    gap = 12
-    content_w = width - 2 * padding
-    col_w = content_w / cols
-    row_h = 90
-    header_h = 165
-    n_rows = (len(rows) + cols - 1) // cols
-    height = header_h + n_rows * row_h + padding
-
-    bg_color = (20, 22, 34)
-    card_color = (30, 33, 48)
-    accent = (255, 46, 99)
+    # ---- palette ----
+    bg_color = (0, 0, 0)
+    card_fill = (0, 0, 0)
+    border_color = (255, 255, 255)
     text_white = (240, 240, 245)
-    text_gray = (150, 152, 168)
+    text_gray = (140, 142, 155)
     green = (80, 220, 130)
     red = (235, 90, 90)
-    yellow = (255, 205, 90)
-    cyan = (110, 210, 235)
+
+    # ---- layout ----
+    width = 900
+    padding = 16
+    gap = 10
+    cols = 3
+    content_w = width - 2 * padding
+    col_w = content_w / cols
+    card_w = col_w - gap
+    row_h_short = 62   # plain label+value cards
+    row_h_tall = 84    # cards that also carry a sub-line (rank change, etc.)
+
+    header_h = 88
+    section_gap = 30  # room for a section title between grids
+
+    def row_heights_for(items):
+        heights = []
+        for row_start in range(0, len(items), cols):
+            row_items = items[row_start:row_start + cols]
+            has_sub = any(len(it) > 3 and it[3] for it in row_items)
+            heights.append(row_h_tall if has_sub else row_h_short)
+        return heights
+
+    # attach rank-change sub-lines to the first two main items
+    main_items_with_sub = [
+        ("Global Rank", main_items[0][1], None, rank_change_segments(global_delta, text_gray, green, red)),
+        ("Country Rank", main_items[1][1], None, rank_change_segments(country_delta, text_gray, green, red)),
+    ] + [(label, value) for label, value in main_items[2:]]
+
+    main_heights = row_heights_for(main_items_with_sub)
+    daily_heights = row_heights_for(daily_items) if daily_items else []
+
+    height = header_h + sum(main_heights)
+    if daily_items:
+        height += section_gap + sum(daily_heights)
+    height += 34 + padding  # room for the "last updated" footer line
 
     img = Image.new("RGB", (width, height), bg_color)
     draw = ImageDraw.Draw(img)
 
-    font_title = load_font(True, 24)
-    font_mode = load_font(False, 14)
-    font_hero_label = load_font(False, 11)
-    font_hero_main = load_font(True, 20)
-    font_hero_main_sm = load_font(True, 17)
-    font_hero_sub = load_font(False, 13)
-    font_value = load_font(True, 22)
-    font_label = load_font(False, 14)
-    font_sub = load_font(False, 13)
+    font_title = load_font(True, 22)
+    font_country = load_font(False, 13)
+    font_section = load_font(True, 12)
+    font_label = load_font(False, 13)
+    font_value = load_font(True, 20)
+    font_sub = load_font(False, 12)
 
-    # ---- header: avatar, username, flag + country (left side) ----
-    avatar_size = 56
+    # ---- header: avatar, username, flag + country ----
+    avatar_size = 52
     text_x = padding
     if avatar_url:
         try:
@@ -232,101 +308,62 @@ def render_card(data, mode, user):
             avatar_img = ImageOps.fit(avatar_img, (avatar_size, avatar_size))
             mask = Image.new("L", (avatar_size, avatar_size), 0)
             ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
-            img.paste(avatar_img, (padding, 18), mask)
+            img.paste(avatar_img, (padding, 16), mask)
             text_x = padding + avatar_size + 14
         except Exception:
             pass
 
-    draw.text((text_x, 20), username, font=font_title, fill=text_white)
+    draw.text((text_x, 16), username, font=font_title, fill=text_white)
 
     flag_img = fetch_flag_image(country_code)
     flag_x = text_x
+    flag_y = 48
     if flag_img:
-        img.paste(flag_img, (flag_x, 52), flag_img)
+        img.paste(flag_img, (flag_x, flag_y), flag_img)
         flag_x += flag_img.width + 6
-    draw.text((flag_x, 50), country_name or country_code, font=font_mode, fill=text_gray)
-    draw.text((text_x, 74), f"osu! {mode} stats", font=font_mode, fill=text_gray)
+    draw.text((flag_x, flag_y - 2), country_name or country_code, font=font_country, fill=text_gray)
 
-    # ---- header: 3 hero boxes (right side) ----
-    left_w = 250
-    hero_gap = 12
-    hero_x0 = padding + left_w + hero_gap
-    hero_area_w = content_w - left_w - hero_gap
-    hero_w = (hero_area_w - 2 * hero_gap) / 3
-    hero_y = 14
-    hero_h = header_h - hero_y - 14
+    # ---- generic card-grid drawer (dynamic per-row height) ----
+    def draw_grid(items, y0):
+        heights = row_heights_for(items)
+        y_cursor = y0
+        for row_idx, this_row_h in enumerate(heights):
+            row_items = items[row_idx * cols:(row_idx + 1) * cols]
+            this_card_h = this_row_h - gap
+            for col, item in enumerate(row_items):
+                label, value = item[0], item[1]
+                value_color = item[2] if len(item) > 2 and item[2] else text_white
+                sub_segments = item[3] if len(item) > 3 else None
 
-    def draw_hero_box(index, label, main_text, main_font, sub_segments, main_color=text_white):
-        x = hero_x0 + index * (hero_w + hero_gap)
-        draw.rounded_rectangle([x, hero_y, x + hero_w, hero_y + hero_h], radius=10, fill=card_color)
-        inner_x = x + 14
-        draw.text((inner_x, hero_y + 10), label, font=font_hero_label, fill=text_gray)
-        draw.text((inner_x, hero_y + 28), main_text, font=main_font, fill=main_color)
-        if sub_segments:
-            draw_segments(draw, (inner_x, hero_y + 56), sub_segments, font_hero_sub)
+                x = padding + col * col_w
+                y = y_cursor
+                draw.rounded_rectangle(
+                    [x, y, x + card_w, y + this_card_h], radius=8,
+                    fill=card_fill, outline=border_color, width=2,
+                )
+                inner_x = x + 14
+                draw.text((inner_x, y + 10), label, font=font_label, fill=text_gray)
+                draw.text((inner_x, y + 30), value, font=font_value, fill=value_color)
+                if sub_segments:
+                    draw_segments(draw, (inner_x, y + 54), sub_segments, font_sub)
+            y_cursor += this_row_h
+        return y_cursor
 
-    def rank_change_segments(delta):
-        if delta is None:
-            return [("no change yet today", text_gray)]
-        if delta > 0:
-            return [(f"\u25bc {delta}", green), (" today", text_gray)]
-        if delta < 0:
-            return [(f"\u25b2 {abs(delta)}", red), (" today", text_gray)]
-        return [("\u2013 unchanged today", text_gray)]
+    cursor_y = draw_grid(main_items_with_sub, header_h)
 
-    draw_hero_box(
-        0,
-        "GLOBAL RANK",
-        f"#{fmt_int(global_rank)}" if global_rank else "Unranked",
-        font_hero_main,
-        rank_change_segments(global_delta),
+    if daily_items:
+        cursor_y += 10
+        draw.text((padding, cursor_y), "DAILY CHALLENGE", font=font_section, fill=text_gray)
+        cursor_y += 20
+        cursor_y = draw_grid(daily_items, cursor_y)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    draw.text(
+        (padding, cursor_y + 6),
+        f"Last updated {timestamp} \u00b7 refreshes hourly",
+        font=font_sub,
+        fill=text_gray,
     )
-    draw_hero_box(
-        1,
-        "COUNTRY RANK",
-        f"#{fmt_int(country_rank)}" if country_rank else "Unranked",
-        font_hero_main,
-        rank_change_segments(country_delta),
-    )
-
-    daily_main = (
-        f"{fmt_int(daily.get('playcount', 0))}d  "
-        f"{fmt_int(daily.get('daily_streak_current', 0))}d  "
-        f"{fmt_int(daily.get('weekly_streak_current', 0))}w"
-    )
-    daily_sub = [
-        (f"{fmt_int(daily.get('daily_streak_best', 0))}d", cyan), ("  ", text_gray),
-        (f"{fmt_int(daily.get('weekly_streak_best', 0))}w", cyan), ("  ", text_gray),
-        (f"{fmt_int(daily.get('top_10p_placements', 0))}", cyan), ("  ", text_gray),
-        (f"{fmt_int(daily.get('top_50p_placements', 0))}", cyan),
-    ]
-    draw_hero_box(
-        2,
-        "DAILY CHALLENGE",
-        daily_main,
-        font_hero_main_sm,
-        daily_sub if daily else [("no data", text_gray)],
-        main_color=yellow,
-    )
-
-    card_w = col_w - gap
-    card_h = row_h - gap
-
-    for i, (label, value, sub) in enumerate(rows):
-        col = i % cols
-        row = i // cols
-        x = padding + col * col_w
-        y = header_h + row * row_h
-        draw.rounded_rectangle([x, y, x + card_w, y + card_h], radius=10, fill=card_color)
-        inner_x = x + 16
-        dot_r = 4
-        dot_y = y + card_h - 18
-        draw.ellipse([inner_x, dot_y - dot_r, inner_x + dot_r * 2, dot_y + dot_r], fill=accent)
-        draw.text((inner_x, y + 12), label, font=font_label, fill=text_gray)
-        draw.text((inner_x, y + 32), value, font=font_value, fill=text_white)
-        if sub:
-            value_w = draw.textlength(value, font=font_value)
-            draw.text((inner_x + value_w + 10, y + 38), sub, font=font_sub, fill=text_gray)
 
     return img
 
