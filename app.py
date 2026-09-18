@@ -346,7 +346,8 @@ def render_profile_basics():
 
     cache_key = (user, mode)
     now = time.time()
-    cached = _image_cache.get(cache_key)
+    force_refresh = request.args.get("refresh") in ("1", "true", "yes")
+    cached = None if force_refresh else _image_cache.get(cache_key)
 
     if cached and now < cached[0]:
         png_bytes = cached[1]
