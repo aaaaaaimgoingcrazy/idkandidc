@@ -299,6 +299,34 @@ def tier_color(value, column):
     return DAILY_CHALLENGE_TIERS[-1][4]
 
 
+# Same tier color ramp, applied to rank percentile instead of Daily Challenge
+# progress, so a strong rank pops with color instead of sitting in plain
+# white. Player-count estimates are rough — they only need to put someone in
+# the right neighborhood of a tier, not be exact.
+ESTIMATED_GLOBAL_PLAYERS = 2_000_000
+ESTIMATED_COUNTRY_PLAYERS = 50_000
+
+
+def get_rank_tier_color(rank, estimated_pool):
+    if not rank:
+        return (240, 240, 245)
+    if rank <= 100:
+        return (242, 152, 198)  # Lustrous
+    percent = rank / estimated_pool
+    for threshold, color in (
+        (0.0005, (197, 173, 255)),  # Radiant
+        (0.0015, (188, 227, 179)),  # Rhodium
+        (0.005, (118, 231, 230)),   # Platinum
+        (0.015, (255, 229, 102)),   # Gold
+        (0.05, (188, 188, 211)),    # Silver
+        (0.15, (154, 113, 92)),     # Bronze
+        (0.5, (186, 179, 171)),     # Iron
+    ):
+        if percent < threshold:
+            return color
+    return (240, 240, 245)
+
+
 def render_card_frames(data, mode, user):
     """Builds both animation frames (summary + detail views) as PIL RGBA
     images of identical size."""
@@ -449,28 +477,29 @@ def render_card_frames(data, mode, user):
             draw.text((x + 12, y + 8), title, font=font_hero_title, fill=text_white)
             return x, y
 
-        def rank_hero(index, title, rank_value, field, history):
+        def rank_hero(index, title, rank_value, field, history, estimated_pool):
             x0, y0 = hero_box(index, title)
             inner_x = x0 + 12
+            rank_color = get_rank_tier_color(rank_value, estimated_pool)
             if phase == "summary":
                 draw.text((inner_x, y0 + 26), f"#{fmt_int(rank_value)}" if rank_value else "Unranked",
-                           font=font_hero_value, fill=text_white)
+                           font=font_hero_value, fill=rank_color)
                 draw_segments(draw, (inner_x, y0 + 56),
                               delta_segments(diff_for(field), field, text_gray, green, red),
                               font_hero_sub)
             else:
                 drew = draw_line_graph(img, draw, x0, y0, hero_w, hero_h, history,
-                                        text_white, lower_is_better=True, top_pad=28)
+                                        rank_color, lower_is_better=True, top_pad=28)
                 if drew:
                     rank_str = f"#{fmt_int(rank_value)}" if rank_value else "Unranked"
                     rw = draw.textlength(rank_str, font=font_row_value)
-                    draw.text((x0 + hero_w - 12 - rw, y0 + 8), rank_str, font=font_row_value, fill=text_white)
+                    draw.text((x0 + hero_w - 12 - rw, y0 + 8), rank_str, font=font_row_value, fill=rank_color)
                 else:
                     draw.text((inner_x, y0 + 34), "Collecting trend data\u2026",
                                font=font_hero_sub, fill=text_gray)
 
-        rank_hero(0, "Global Ranking", global_rank, "global_rank", global_history)
-        rank_hero(1, "Country Ranking", country_rank, "country_rank", country_history)
+        rank_hero(0, "Global Ranking", global_rank, "global_rank", global_history, ESTIMATED_GLOBAL_PLAYERS)
+        rank_hero(1, "Country Ranking", country_rank, "country_rank", country_history, ESTIMATED_COUNTRY_PLAYERS)
 
         x0, y0 = hero_box(2, "Daily Challenge")
         if not daily:
@@ -567,9 +596,9 @@ def render_card_frames(data, mode, user):
                 bar_draw = ImageDraw.Draw(bar_layer)
                 w300 = th_w * (count_300 / tot_for_bar)
                 w100 = th_w * (count_100 / tot_for_bar)
-                bar_draw.rectangle([th_x, bar_y0, th_x + w300, bar_y1], fill=(110, 220, 235, 255))
-                bar_draw.rectangle([th_x + w300, bar_y0, th_x + w300 + w100, bar_y1], fill=(150, 230, 150, 255))
-                bar_draw.rectangle([th_x + w300 + w100, bar_y0, th_x + th_w, bar_y1], fill=(235, 190, 110, 255))
+                bar_draw.rectangle([th_x, bar_y0, th_x + w300, bar_y1], fill=(0, 255, 255, 255))
+                bar_draw.rectangle([th_x + w300, bar_y0, th_x + w300 + w100, bar_y1], fill=(0, 255, 0, 255))
+                bar_draw.rectangle([th_x + w300 + w100, bar_y0, th_x + th_w, bar_y1], fill=(255, 165, 0, 255))
                 mask = Image.new("L", img.size, 0)
                 ImageDraw.Draw(mask).rounded_rectangle(
                     [th_x, y_cursor, th_x + th_w, y_cursor + card_h_wide], radius=8, fill=255)
@@ -610,11 +639,11 @@ def render_card_frames(data, mode, user):
         draw.text((padding, y_cursor), "GRADES", font=font_section_title, fill=text_white)
         gy = y_cursor + grades_title_h
         grade_config = [
-            ("SS", grades.get("ss", 0), (255, 229, 102), "grade_ss"),
-            ("SSH", grades.get("ssh", 0), (230, 230, 240), "grade_ssh"),
-            ("S", grades.get("s", 0), (255, 229, 102), "grade_s"),
-            ("SH", grades.get("sh", 0), (230, 230, 240), "grade_sh"),
-            ("A", grades.get("a", 0), (150, 230, 150), "grade_a"),
+            ("SS", grades.get("ss", 0), (255, 255, 0), "grade_ss"),
+            ("SSH", grades.get("ssh", 0), (255, 0, 255), "grade_ssh"),
+            ("S", grades.get("s", 0), (255, 255, 0), "grade_s"),
+            ("SH", grades.get("sh", 0), (0, 255, 255), "grade_sh"),
+            ("A", grades.get("a", 0), (0, 255, 0), "grade_a"),
         ]
         for i, (label, count, color, field) in enumerate(grade_config):
             gx = padding + i * (grade_w + grade_gap)
