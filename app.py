@@ -117,11 +117,15 @@ def extract_trackable_values(data):
         "maximum_combo": stats.get("maximum_combo"),
         "replays_watched_by_others": stats.get("replays_watched_by_others"),
         "play_time": stats.get("play_time"),
+        "hits_per_play": (stats.get("total_hits", 0) / stats.get("play_count")) if stats.get("play_count") else None,
         "grade_ss": grades.get("ss"),
         "grade_ssh": grades.get("ssh"),
         "grade_s": grades.get("s"),
         "grade_sh": grades.get("sh"),
         "grade_a": grades.get("a"),
+        "grade_b": grades.get("b"),   # not in the official API yet — stays None
+        "grade_c": grades.get("c"),   # until a source for these is wired in
+        "grade_d": grades.get("d"),
         "medals": medals,
     }
 
@@ -422,7 +426,7 @@ def render_card_frames(data, mode, user):
 
     grades_title_h = 22
     grade_gap = 8
-    grade_w = (content_w - 4 * grade_gap) / 5
+    grade_w = (content_w - 7 * grade_gap) / 8
     grade_h = 56
 
     row_h_wide = row_h + 16  # Total Hits row needs extra room for the breakdown bar
@@ -582,9 +586,9 @@ def render_card_frames(data, mode, user):
         stat_box(col_x[2], y_cursor, card_w, card_h, "Maximum Combo", fmt_int(max_combo), "maximum_combo")
         y_cursor += row_h
 
-        # ---- Total Hits: full-width row, own layout per phase ----
+        # ---- Total Hits (spans 2 cols) + Hits Per Play (1 col): shared row ----
         card_h_wide = row_h_wide - gap
-        th_x, th_w = col_x[0], content_w
+        th_x, th_w = col_x[0], 2 * col_w - gap
         draw.rounded_rectangle([th_x, y_cursor, th_x + th_w, y_cursor + card_h_wide], radius=8,
                                 fill=glass_fill, outline=border_color, width=2)
         if phase == "summary":
@@ -605,12 +609,11 @@ def render_card_frames(data, mode, user):
                 bar_layer.putalpha(Image.composite(bar_layer.getchannel("A"), Image.new("L", img.size, 0), mask))
                 img.alpha_composite(bar_layer)
 
-            sub_w = th_w / 4
             headers = ["Total Hits", "300s", "100s", "50s"]
             vals = [fmt_int(total_hits), fmt_int(count_300), fmt_int(count_100), fmt_int(count_50)]
             fields = ["total_hits", None, None, None]
             for i in range(4):
-                cx = th_x + i * sub_w + 12
+                cx = th_x + i * (th_w / 4) + 12
                 draw.text((cx, y_cursor + 8), headers[i], font=font_box_label, fill=text_gray)
                 draw.text((cx, y_cursor + 26), vals[i], font=font_box_value_sm, fill=text_white)
                 if fields[i]:
@@ -627,6 +630,10 @@ def render_card_frames(data, mode, user):
             if not drew:
                 draw.text((th_x + 12, y_cursor + card_h_wide / 2 - 4), "Collecting trend data\u2026",
                            font=font_hero_sub, fill=text_gray)
+
+        hpp_x = col_x[2]
+        stat_box(hpp_x, y_cursor, card_w, card_h_wide, "Hits Per Play",
+                 f"{(total_hits / play_count) if play_count else 0:.1f}", "hits_per_play")
         y_cursor += row_h_wide
 
         stat_box(col_x[0], y_cursor, card_w, card_h, "Replays Watched", fmt_int(replays_watched), "replays_watched_by_others")
@@ -635,22 +642,28 @@ def render_card_frames(data, mode, user):
         stat_box(col_x[2], y_cursor, card_w, card_h, "Total Play Time", fmt_playtime(play_time_sec), "play_time", fmt_pt)
         y_cursor += row_h + 10
 
-        # ---- Grades: SS / SSH / S / SH / A (the only 5 grades the API tracks) ----
+        # ---- Grades: SS/SSH/S/SH/A are real; B/C/D aren't tracked by the
+        # osu! API today, so they show "—" until a data source is wired in
+        # (see extract_trackable_values) — everything else here already
+        # works for them automatically once that happens. ----
         draw.text((padding, y_cursor), "GRADES", font=font_section_title, fill=text_white)
         gy = y_cursor + grades_title_h
         grade_config = [
-            ("SS", grades.get("ss", 0), (255, 255, 0), "grade_ss"),
-            ("SSH", grades.get("ssh", 0), (255, 0, 255), "grade_ssh"),
-            ("S", grades.get("s", 0), (255, 255, 0), "grade_s"),
-            ("SH", grades.get("sh", 0), (0, 255, 255), "grade_sh"),
-            ("A", grades.get("a", 0), (0, 255, 0), "grade_a"),
+            ("SS", grades.get("ss"), (255, 255, 0), "grade_ss"),
+            ("SSH", grades.get("ssh"), (255, 0, 255), "grade_ssh"),
+            ("S", grades.get("s"), (255, 255, 0), "grade_s"),
+            ("SH", grades.get("sh"), (0, 255, 255), "grade_sh"),
+            ("A", grades.get("a"), (0, 255, 0), "grade_a"),
+            ("B", grades.get("b"), (255, 170, 0), "grade_b"),
+            ("C", grades.get("c"), (255, 102, 0), "grade_c"),
+            ("D", grades.get("d"), (255, 0, 0), "grade_d"),
         ]
         for i, (label, count, color, field) in enumerate(grade_config):
             gx = padding + i * (grade_w + grade_gap)
             draw.rounded_rectangle([gx, gy, gx + grade_w, gy + grade_h], radius=6,
                                     fill=glass_fill, outline=border_color, width=2)
             draw.text((gx + 10, gy + 8), label, font=font_grade_letter, fill=color)
-            count_str = fmt_int(count)
+            count_str = fmt_int(count) if count is not None else "\u2014"
             cw = draw.textlength(count_str, font=font_grade_count)
             draw.text((gx + grade_w - 10 - cw, gy + 10), count_str, font=font_grade_count, fill=text_white)
             segs = delta_segments(diff_for(field), field, text_gray, green, red)
