@@ -1,48 +1,3 @@
-"""
-worker.py — completion-tracking background worker
-
-Runs as its own always-on process (a Render "Background Worker" service, NOT
-the web service that renders images), so a multi-day crawl never competes
-with or blocks image rendering. It does two things, forever:
-
-  1. Beatmap fetch (via Bancho, i.e. the official osu.ppy.sh API): pages
-     through /beatmapsets/search for each configured status ("ranked",
-     "approved") and year, and upserts every beatmap difficulty it finds
-     into the `beatmaps` table. Resumable across restarts via a cursor
-     saved in `crawl_state` per (status, year).
-
-  2. Score check, for two independently-tracked accounts:
-       - "official_osu"  — your regular osu.ppy.sh account, mode=osu
-       - "private_osurx" — your account on the private server, mode=osurx
-     For each account, repeatedly asks the database for beatmap ids it
-     hasn't checked yet, and calls that account's server to see whether a
-     score exists on each one. This resumes naturally on restart — there's
-     no separate cursor, it just keeps asking "what's still unchecked?".
-
-There is no player/session concept here (this isn't Roblox) — the closest
-equivalent to Luau's `playerGeneration` cancel-on-disconnect check is simply
-that this process can be stopped and restarted at any time without losing
-progress, since every unit of work is committed to Postgres as it completes.
-
-Required environment variables:
-    DATABASE_URL            postgresql://... (Neon, e.g.)
-
-    OSU_CLIENT_ID            Bancho (official) OAuth app — same one app.py uses
-    OSU_CLIENT_SECRET
-
-    OFFICIAL_USERNAME        the account to check on Bancho, mode=osu
-
-    PRIVATE_BASE_URL         e.g. https://lazer-api.shikkesora.com
-    PRIVATE_CLIENT_ID        OAuth app registered on the private server
-    PRIVATE_CLIENT_SECRET
-    PRIVATE_USERNAME         the account to check on the private server, mode=osurx
-
-Optional:
-    TRACKER_START_YEAR (default 2007)
-    TRACKER_END_YEAR   (default 2026)
-    SCORE_CHECK_DELAY  (default 1.0 seconds between score-check requests)
-"""
-
 import os
 import time
 import random
@@ -111,9 +66,6 @@ def get_token(base_url, client_id, client_secret):
 
 
 def api_get(base_url, token, path, silent_statuses=None):
-    """Mirrors the Luau script's osuGet: retries on 429/5xx, treats listed
-    statuses (e.g. 404 = 'no score on this map') as an expected empty result
-    rather than an error."""
     silent_statuses = silent_statuses or set()
     for attempt in range(1, MAX_RETRIES + 1):
         try:

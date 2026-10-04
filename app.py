@@ -1,42 +1,3 @@
-"""
-app.py — live osu! stats card renderer
-
-Serves an animated PNG (APNG) at:
-    /renders/profile-basics?user=<id_or_username>&mode=osu
-
-Each box on the card cycles between two views every 5 seconds:
-  - "summary": current value + how much it's changed today
-  - "detail": a small trend graph
-
-Trend data comes from two places:
-  - Global rank uses the osu! API's own `rank_history` (real, ~90 days).
-  - Everything else (country rank, pp, accuracy, score totals, hit counts,
-    grade counts, medal count) has no official history in the osu! API, so
-    this app builds its own by remembering one snapshot per UTC day per
-    (user, mode). That log starts at a single point and grows by one point
-    per day the app keeps running — it resets on redeploy since it's all
-    in memory. "Today's change" is always computed the same way: current
-    value vs. today's first-seen snapshot.
-
-The image itself is regenerated from the osu! API at most once per hour per
-(user, mode) pair; requests within that hour are served instantly from an
-in-memory cache. Add &refresh=1 to the URL to force an immediate re-fetch,
-bypassing the cache (handy for testing). Embed the URL in your osu! "me!"
-page like:
-
-    [url=https://YOUR-APP-URL/renders/profile-basics?user=25752151]
-    [img]https://YOUR-APP-URL/renders/profile-basics?user=25752151[/img]
-    [/url]
-
-Every viewer's browser fetches the image URL directly, so this app needs to
-be reachable 24/7 (see DEPLOY.md for hosting steps + a free way to keep it
-from sleeping).
-
-Required environment variables:
-    OSU_CLIENT_ID       - from https://osu.ppy.sh/home/account/edit (OAuth)
-    OSU_CLIENT_SECRET   - same page
-"""
-
 import io
 import os
 import time
@@ -173,7 +134,6 @@ def update_daily_log(user, mode, values):
 
 
 def get_raw_diff(log, field, current_value):
-    """current_value minus today's first-seen snapshot. None if unavailable."""
     if current_value is None:
         return None
     today = datetime.now(timezone.utc).date().isoformat()
@@ -247,7 +207,6 @@ def draw_segments(draw, xy, segments, font):
 
 
 def draw_labeled_rows(draw, x0, y0, w, rows, label_font, value_font, text_gray, right_pad=16):
-    """rows: list of (label, value, color). Label left, value right-aligned."""
     ry = y0
     for label, value, color in rows:
         draw.text((x0, ry), label, font=label_font, fill=text_gray)
@@ -258,8 +217,6 @@ def draw_labeled_rows(draw, x0, y0, w, rows, label_font, value_font, text_gray, 
 
 def draw_line_graph(img, draw, box_x, box_y, box_w, box_h, history_data, line_color,
                      lower_is_better=False):
-    """Draws a small shaded trend line inside the given box. Returns False
-    (drawing nothing) if there isn't enough history yet to plot."""
     if not history_data or len(history_data) < 2:
         return False
 
@@ -300,10 +257,6 @@ def draw_line_graph(img, draw, box_x, box_y, box_w, box_h, history_data, line_co
 
 
 def make_translucent_black(width, height, alpha=77):
-    """Flat black canvas at ~30% opacity (77/255), so it blends with
-    whatever real background sits behind it once embedded. This only works
-    because the card is exported as an animated PNG (APNG) — GIF
-    transparency is strictly on/off per pixel and can't do partial alpha."""
     return Image.new("RGBA", (width, height), (0, 0, 0, alpha))
 
 
@@ -320,8 +273,6 @@ DAILY_CHALLENGE_TIERS = [
 
 
 def tier_color(value, column):
-    """column: 0 = total participation (days), 1 = daily streak (days),
-    2 = weekly streak (weeks)."""
     for _name, p, d, w, color in DAILY_CHALLENGE_TIERS:
         if value >= (p, d, w)[column]:
             return color
@@ -353,10 +304,6 @@ def get_rank_tier_color(rank, estimated_pool):
 
 
 def render_card_frames(data, mode, user):
-    """Builds both animation frames (summary + detail views) as PIL RGBA
-    images of identical size. Layout, fonts, and spacing are ported directly
-    from the reference design; only the data underneath is real (see the
-    tracking helpers above) instead of the reference's dummy placeholders."""
     username = data.get("username", "Unknown")
     avatar_url = data.get("avatar_url")
     country = data.get("country") or {}
