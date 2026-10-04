@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: osu-stats-card
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: OSU_CLIENT_ID
+        sync: false
+      - key: OSU_CLIENT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OFFICIAL_USERNAME
+        sync: false
+      - key: PRIVATE_BASE_URL
+        sync: false
+      - key: PRIVATE_CLIENT_ID
+        sync: false
+      - key: PRIVATE_CLIENT_SECRET
+        sync: false
+      - key: PRIVATE_USERNAME
+        sync: false
+      - key: TRACKER_START_YEAR
+        value: "2007"
+      - key: TRACKER_END_YEAR
+        value: "2026"
